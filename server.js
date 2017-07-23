@@ -51,6 +51,23 @@ io.on('connection', (socket) => {
                     resolvedCaller.emit('call-resolved', payload);
                 }
                 break;
+            case 'details-change-requested':
+                socket.name = payload.name;
+                emitUsersListChanged();
+                break;
+            case 'call-ended':
+                let sender = _.find(users, (user) => user.id === payload.senderID);
+                let recipient = _.find(users, (user) => user.id === payload.receiverID);
+
+                if (sender) {
+                    sender.callID = null;
+                }
+                if (recipient) {
+                    recipient.callID = null;
+                    recipient.emit('call-ended', payload);
+                }
+                emitUsersListChanged();
+                break;
             default:
                 let receiver = _.find(users, (user) => user.id === payload.receiverID);
 
