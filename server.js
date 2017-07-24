@@ -6,6 +6,7 @@ const _ = require('lodash');
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
+const config = require('./config');
 
 let users = [];
 
@@ -20,6 +21,10 @@ function emitUsersListChanged () {
     io.emit('users-list-changed', list);
 }
 
+function findUserBy (targetID) {
+    return _.find(users, (user) => user.id === targetID);
+}
+
 io.on('connection', (socket) => {
     console.log(`New connection: ${socket.id}`);
 
@@ -28,65 +33,53 @@ io.on('connection', (socket) => {
     emitUsersListChanged();
 
     socket.on('message', (messageType, payload) => {
-        // todo: add call-ended
+        let sender;
+        let recipient;
+
         switch (messageType) {
             case 'call-requested':
-                let requestedCallee = _.find(users, (user) => user.id === payload.callee.id);
-
-                if (requestedCallee) {
-                    requestedCallee.emit('call-requested', payload);
-                }
+                recipient = findUserBy(payload.callee.id);
                 break;
+
             case 'call-resolved':
-                let resolvedCaller = _.find(users, (user) => user.id === payload.to.caller.id);
-                let resolvedCallee = _.find(users, (user) => user.id === payload.to.callee.id);
-
-                if (resolvedCaller && resolvedCallee) {
-                    if (payload.agreed) {
-                        resolvedCaller.callID = payload.to.callID;
-                        resolvedCallee.callID = payload.to.callID;
-                        emitUsersListChanged();
-                    }
-
-                    resolvedCaller.emit('call-resolved', payload);
+                recipient = findUserBy(payload.to.caller.id);
+                sender = findUserBy(payload.to.callee.id);
+                if (recipient && sender && payload['agreed']) {
+                    recipient.callID = payload.to.callID;
+                    sender.callID = payload.to.callID;
+                    emitUsersListChanged();
                 }
                 break;
+
             case 'details-change-requested':
                 socket.name = payload.name;
                 emitUsersListChanged();
                 break;
-            case 'call-ended':
-                let sender = _.find(users, (user) => user.id === payload.senderID);
-                let recipient = _.find(users, (user) => user.id === payload.receiverID);
 
-                if (sender) {
-                    sender.callID = null;
-                }
-                if (recipient) {
-                    recipient.callID = null;
-                    recipient.emit('call-ended', payload);
-                }
+            case 'call-ended':
+                sender = findUserBy(payload['senderID']);
+                recipient = findUserBy(payload['receiverID']);
+                sender && (sender.callID = null);
+                recipient && (recipient.callID = null);
                 emitUsersListChanged();
                 break;
-            default:
-                let receiver = _.find(users, (user) => user.id === payload.receiverID);
 
-                if (receiver) {
-                    receiver.emit(messageType, payload);
-                }
+            default:
+                recipient = findUserBy(payload['receiverID']);
                 break;
         }
+
+        console.log(`Received message: ${messageType}`);
+        recipient && recipient.emit(messageType, payload);
     });
 
     socket.on('disconnect', () => {
         console.log(`Disconnected: ${socket.id}`);
-
         users = _.without(users, socket);
-
         emitUsersListChanged();
     });
 });
 
-server.listen(7055, () => {
-    console.log('wtf');
+server.listen(config.port, () => {
+    console.log(`Listening on ${config.port}`);
 });
