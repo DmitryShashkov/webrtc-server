@@ -1,12 +1,20 @@
 const express = require('express');
 const socketIO = require('socket.io');
 const http = require('http');
+const https = require('https');
+const fs = require('fs');
 const _ = require('lodash');
 
-const app = express();
-const server = http.createServer(app);
-const io = socketIO(server);
 const config = require('./config');
+const app = express();
+
+const server = (config.useHTTPS) 
+    ? https.createServer({ 
+        key: fs.readFileSync(config.credentials.key),
+        cert: fs.readFileSync(config.credentials.cert)
+    }, app)
+    : http.createServer(app);
+const io = socketIO(server);
 
 let users = [];
 
